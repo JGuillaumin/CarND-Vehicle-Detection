@@ -68,6 +68,8 @@ def extract_features(imgs, color_space='RGB', spatial_size=(32, 32),
         file_features = []
         # Read in each one by one
         image = mpimg.imread(file)
+        image = (image * 255).astype(np.uint8)
+
         # apply color conversion if other than 'RGB'
         if color_space != 'RGB':
             if color_space == 'HSV':
@@ -205,9 +207,9 @@ def single_img_features(img, color_space='RGB', spatial_size=(32, 32),
 
 # Define a function you will pass an image
 # and the list of windows to be searched (output of slide_windows())
-def search_windows(img, windows, clf, scaler, color_space='RGB',
+def search_windows(img, windows, clf, color_space='RGB',
                     spatial_size=(32, 32), hist_bins=32,
-                    hist_range=(0, 256), orient=9,
+                    orient=9,
                     pix_per_cell=8, cell_per_block=2,
                     hog_channel=0, spatial_feat=True,
                     hist_feat=True, hog_feat=True):
@@ -226,9 +228,11 @@ def search_windows(img, windows, clf, scaler, color_space='RGB',
                             hog_channel=hog_channel, spatial_feat=spatial_feat,
                             hist_feat=hist_feat, hog_feat=hog_feat)
         #5) Scale extracted features to be fed to classifier
-        test_features = scaler.transform(np.array(features).astype(np.float64).reshape(1, -1))
+        test_features = np.array(features).astype(np.float64).reshape(1, -1)
         #6) Predict using your classifier
-        prediction = clf.predict(test_features)
+        #prediction = clf.predict(test_features)
+        dec = clf.decision_function(test_features)
+        prediction = int(dec>0.7)
         #7) If positive (prediction == 1) then save the window
         if prediction == 1:
             on_windows.append(window)
@@ -237,11 +241,21 @@ def search_windows(img, windows, clf, scaler, color_space='RGB',
 
 
 def add_heat(heatmap, bbox_list):
+    image_shape = heatmap.shape
     # Iterate through list of bboxes
-    for box in bbox_list:
+    for pt1, pt2 in bbox_list:
         # Add += 1 for all pixels inside each bbox
         # Assuming each "box" takes the form ((x1, y1), (x2, y2))
-        heatmap[box[0][1]:box[1][1], box[0][0]:box[1][0]] += 1
+        #heatmap[box[0][1]:box[1][1], box[0][0]:box[1][0]] += 1
+        x1, y1 = pt1
+        x2, y2 = pt2
+        x1 = min(max(x1, 0), image_shape[1])
+        x2 = min(max(x2, 0), image_shape[1])
+        y1 = min(max(y1, 0), image_shape[0])
+        y2 = min(max(y2, 0), image_shape[0])
+        xv, yv = np.meshgrid(range(x1, x2), range(y1, y2))
+
+        heatmap[yv, xv] += 1
 
     # Return updated heatmap
     return heatmap  # Iterate through list of bboxes
@@ -283,7 +297,7 @@ def draw_labeled_bboxes(img, labels):
     # Return the image
     return img
 
-def pipeline(file, output_dir, save_inter, svc, scaler, settings_classifier, filepath=False):
+def pipeline(file, output_dir, save_inter, svc, settings_classifier, filepath=False):
     if filepath == True:
         print("processing : {}".format(file))
         img = cv2.imread(file)
@@ -293,11 +307,11 @@ def pipeline(file, output_dir, save_inter, svc, scaler, settings_classifier, fil
         image_name = 'video'
 
     # ################## SETTINGS PIPELINE ################################
-    scales = [(60, 60), (90, 90), (120, 120), (170, 170)]
-    overlaps = [0.25, 0.75, 0.75, 0.75]
-    y_stops = [550, 600, 650, None]
-    x_start_stops = [[640, 890], [640, 990], [640, None], [640, None]]
-    colors = [(255, 0, 0), (128, 128, 0), (0, 128, 128), (128, 0, 128)]
+    scales = [(64, 64), (96, 96), (128, 128)]
+    overlaps = [0.75, 0.75, 0.75]
+    y_start_stops = [[400, 500], [400, 500], [400, 600]]
+    x_start_stops = [[None, None], [None, None], [None, None]]
+    colors = [(255, 0, 0), (128, 128, 0), (0, 128, 128)]
     # #####################################################################
 
     # ################## SETTINGS CLASSIFIER ##############################
@@ -315,16 +329,16 @@ def pipeline(file, output_dir, save_inter, svc, scaler, settings_classifier, fil
 
     windowed_image = np.copy(img)
     hot_windowed_image = np.copy(img)
-    heat = np.zeros_like(img[:, :, 0]).astype(np.float)
+    heat = np.zeros_like(img[:, :, 0]).astype(np.uint8)
 
     # STEP 1 : compute the sliding windows
-    for scale, overlap, color, y_stop, x_start_stop in zip(scales, overlaps, colors, y_stops, x_start_stops):
+    for scale, overlap, color, y_start_stop, x_start_stop in zip(scales, overlaps, colors, y_start_stops, x_start_stops):
 
-        windows = slide_window(img, x_start_stop=x_start_stop, y_start_stop=[380, y_stop],
+        windows = slide_window(img, x_start_stop=x_start_stop, y_start_stop=y_start_stop,
                                xy_window=scale, xy_overlap=(overlap, overlap))
 
         # STEP 2 : Apply classifier on current windows
-        hot_windows = search_windows(img, windows, svc, scaler, color_space=color_space,
+        hot_windows = search_windows(img, windows, svc, color_space=color_space,
                                      spatial_size=spatial_size, hist_bins=hist_bins,
                                      orient=orient, pix_per_cell=pix_per_cell,
                                      cell_per_block=cell_per_block,

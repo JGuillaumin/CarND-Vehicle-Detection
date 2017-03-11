@@ -4,6 +4,7 @@ import time
 import argparse
 import pickle
 import cv2
+from sklearn.externals import joblib
 
 from project.utils import pipeline
 
@@ -50,15 +51,20 @@ if __name__ == '__main__':
     [print("\t{}".format(file)) for file in input_files]
 
     # load calibration coeff
-    with open(model_file, mode='rb') as f:
-        svc, scaler, settings_classifier = pickle.load(f)
+    # with open(model_file, mode='rb') as f:
+        #svc, scaler, settings_classifier = pickle.load(f)
 
-    print("\nsvc : {}".format(type(svc)))
-    print("scaler : {}".format(type(scaler)))
+    data = joblib.load(model_file)
+    # data = joblib.load('models/clf_9869.pkl')
+    # svc = data['model']
+    clf = data['model']
+    settings_classifier = data['settings']
+
+    print("\nsvc : {}".format(type(clf)))
     print("settings_classifier : \n\t{}\n".format(settings_classifier))
 
     for file in input_files:
-        bounding_boxes_image = pipeline(file, output_dir, save_inter, svc, scaler, settings_classifier, filepath=True)
+        bounding_boxes_image = pipeline(file, output_dir, save_inter, clf, settings_classifier, filepath=True)
         image_name = os.path.split(file)[-1]
         cv2.imwrite(os.path.join(output_dir, 'final_'+image_name), bounding_boxes_image)
 

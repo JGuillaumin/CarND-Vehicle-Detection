@@ -6,6 +6,7 @@ import re
 
 import cv2
 from moviepy.editor import VideoFileClip
+from sklearn.externals import joblib
 
 from project.settings_classifier import settings_classifier
 from project.settings_pipeline import settings_pipeline
@@ -18,7 +19,7 @@ if __name__ == '__main__':
     parser.add_argument("--input_video", help="path to a video where apply the pipeline",
                         default='project_video.mp4')
     parser.add_argument("--model", help="path to a .pkl file that contains model+scaler+settings_classifier",
-                        default='data/classif_RGB.pkl')
+                        default='data/classif_YUV.pkl')
     parser.add_argument("--output_video", help="complete path (path + name) for the output",
                         default='output_project_video.mp4')
     args = parser.parse_args()
@@ -36,22 +37,30 @@ if __name__ == '__main__':
     ###########################################################################################
 
     # load calibration coeff
-    with open(model_file, mode='rb') as f:
-        svc, scaler, settings_classifier = pickle.load(f)
+    #with open(model_file, mode='rb') as f:
+    #    svc, scaler, settings_classifier = pickle.load(f)
 
-    print("\nsvc : {}".format(type(svc)))
-    print("scaler : {}".format(type(scaler)))
+    data = joblib.load(model_file)
+    # data = joblib.load('models/clf_9869.pkl')
+    # svc = data['model']
+    clf = data['model']
+    settings_classifier = data['settings']
+
+    print("\nsvc : {}".format(type(clf)))
+    print("settings_classifier : \n\t{}\n".format(settings_classifier))
+
+    print("\nsvc : {}".format(type(clf)))
     print("settings_classifier : \n\t{}\n".format(settings_classifier))
 
     # the function create a custom pipeline with camera matrix 'mtx' and distortion coefficients 'dist'.
     # file is set to false, the first argument 'file' represents an image as array.
-    def create_image_pipeline(svc, scaler, settings_classifier):
+    def create_image_pipeline(svc, settings_classifier):
         def image_pipeline(file):
-            return pipeline(file, None, False, svc, scaler, settings_classifier, filepath=False)
+            return pipeline(file, None, False, svc, settings_classifier, filepath=False)
         # returns a function the pre-configurated arguments (python closure)
         return image_pipeline
 
-    image_pipeline = create_image_pipeline(svc, scaler, settings_classifier)
+    image_pipeline = create_image_pipeline(clf, settings_classifier)
 
     # load input_video
     clip1 = VideoFileClip(input_video)

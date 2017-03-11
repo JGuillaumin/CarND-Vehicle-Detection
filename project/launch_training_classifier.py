@@ -7,8 +7,9 @@ from project.settings_classifier import settings_classifier
 from project.utils import extract_features
 from sklearn.svm import LinearSVC
 from sklearn.preprocessing import StandardScaler
-from sklearn.utils import shuffle
+from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split
+from sklearn.externals import joblib
 import pickle
 
 if __name__ == "__main__":
@@ -17,7 +18,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--name", help="name for the model/classifier ",
                         default='classifier')
-    parser.add_argument("--output_dir", help="output folder, where the trained model will be saved", default='data/')
+    parser.add_argument("--output_dir", help="output folder, where the trained model will be saved",
+                        default='data/')
 
     args = parser.parse_args()
 
@@ -64,32 +66,31 @@ if __name__ == "__main__":
 
     # Normalize features and create labels
     X = np.vstack((car_features, notcar_features)).astype(np.float64)
-    # Fit a per-column scaler
-    X_scaler = StandardScaler().fit(X)
-    # Apply the scaler to X
-    scaled_X = X_scaler.transform(X)
-    # Define the labels vector
+
     y = np.hstack((np.ones(len(car_features)), np.zeros(len(notcar_features))))
-    print("X.shape : {}".format(scaled_X.shape))
+
     print(" {} samples".format(len(y)))
     print("\t {} cars".format(len(car_features)))
     print("\t {} notcars".format(len(notcar_features)))
+    print("\t {} features".format(X.shape))
 
     # Shuffle and split data for training and validation
     rand_state = np.random.randint(0, 100)
-    scaled_X, y = shuffle(scaled_X, y, random_state=rand_state)
 
-    X_train, X_test, y_train, y_test = train_test_split(scaled_X, y, test_size=0.2, random_state=rand_state)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=rand_state)
 
-    # Train a linear classifier
-    svc = LinearSVC()
+    clf = Pipeline([('scaling', StandardScaler()),
+                    ('classification', LinearSVC(loss='hinge')),
+                    ])
+
     # Check the training time for the SVC
     t = time.time()
-    svc.fit(X_train, y_train)
+    clf.fit(X_train, y_train)
     t2 = time.time()
     print(round(t2 - t, 2), 'Seconds to train SVC...')
+
     # Check the score of the SVC
-    print('Test Accuracy of SVC = ', round(svc.score(X_test, y_test), 4))
+    print('Test Accuracy of SVC = ', round(clf.score(X_test, y_test), 4))
     # Check the prediction time for a single sample
 
     # To save :
@@ -97,7 +98,8 @@ if __name__ == "__main__":
     # - settings_classifier
     # - svc
 
-    pickle.dump((svc, X_scaler, settings_classifier), open(os.path.join(output_dir, name+'.pkl'), "wb"))
+    # pickle.dump((clf, settings_classifier), open(os.path.join(output_dir, name+'.pkl'), "wb")
+    joblib.dump({'model': clf, 'settings': settings_classifier}, os.path.join(output_dir, name+'.pkl'))
     print("Classifier, Scaler and setting are saved.")
 
     print("Script took {} seconds. ".format(time.time() - t_start))
